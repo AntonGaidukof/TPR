@@ -1,75 +1,41 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.IO;
+using System.Configuration;
 using System.Linq;
+using TPR_task.ProviderExpenses;
 
 namespace TPR_task
 {
     public class Program
     {
-        private const int SWITCH_AMOUNT = 10000;
-        private const double REPAIR_COST = 500;
-
         public static void Main( string[] args )
         {
-            Console.WriteLine( "Введите расположение файла с данными поставщиков" );
-            string filePath = Console.ReadLine();
+            int switchAmount = Convert.ToInt32( ConfigurationManager.AppSettings[ "SwitchAmount" ] );
+            double repairCost = Convert.ToDouble( ConfigurationManager.AppSettings[ "RepairCost" ] );
+            string switchDataFilePath = ConfigurationManager.AppSettings[ "SwitchDataFilePath" ];
 
-            var defectiveSwitchDatas = ReadDefectiveSwitchData( filePath );
-            var providerExpenses = new Dictionary<int, double>();
+            var providerExpenseCalculator = new ProviderExpenseCalculator( switchAmount, repairCost );
+            var defectiveSwitchDataReader = new DefectiveSwitchDataReader();
+            var defectiveSwitchDatas = defectiveSwitchDataReader.Read( switchDataFilePath );
+            var providerExpenses = new List<ProviderExpense>();
 
-            for ( int i = 0; i < defectiveSwitchDatas.Count; i++ )
+            foreach ( var defectiveSwitchData in defectiveSwitchDatas )
             {
-                Console.WriteLine( $"Расчитываем расходы с поставщиком: {i}" );
-                providerExpenses.Add( i, CalculateProviderExpenses( defectiveSwitchDatas[ i ] ) );
+                Console.WriteLine( $"Расчитываем расходы с поставщиком: {defectiveSwitchData.ProvviderIndex}" );
+                var providerExpense = providerExpenseCalculator.Calculate( defectiveSwitchData );
+                
+                Console.WriteLine( $"Вероятность брака детали по формуле полной вероятности: {providerExpense.ProbabilityOfDefective}" );
+                Console.WriteLine( $"Вероятное количестов бракованных деталей: {providerExpense.DefectiveSwitchAmount}" );
+                Console.WriteLine( $"Стоимость ремонта бракованных деталей: {providerExpense.RepairCost}, скидка поставщика: {defectiveSwitchData.ProviderDiscount}, расходы с данным поставщиком: {providerExpense.Expense}" );
+
+                providerExpenses.Add( providerExpense );
+
                 Console.WriteLine();
             }
 
-            var recommendedProvider = providerExpenses.FirstOrDefault( item => item.Value == providerExpenses.Values.Min() );
-            Console.WriteLine( $"Рекомендуемый поставщик: {recommendedProvider.Key} с расходами: {recommendedProvider.Value}" );
-        }
-
-        private static IReadOnlyList<DefectiveSwitchData> ReadDefectiveSwitchData( string filePath )
-        {
-            var result = new List<DefectiveSwitchData>();
-            using ( StreamReader fstream = new StreamReader( filePath ) )
-            {
-                while ( !fstream.EndOfStream )
-                {
-                    string switchData = fstream.ReadLine();
-                    string[] switchDataArr = switchData.Replace( '.', ',' ).Split( ' ' );
-
-                    double oneProcentProbability = Convert.ToDouble( switchDataArr[ 0 ] );
-                    double twoProcentProbability = Convert.ToDouble( switchDataArr[ 1 ] );
-                    double threeProcentProbability = Convert.ToDouble( switchDataArr[ 2 ] );
-                    double? providerDiscount = switchDataArr.Length == 4 ? Convert.ToDouble( switchDataArr[ 3 ] ) : null;
-
-                    result.Add( new DefectiveSwitchData(
-                        oneProcentProbability,
-                        twoProcentProbability,
-                        threeProcentProbability,
-                        providerDiscount ) );
-                }
-            }
-
-            return result;
-        }
-
-        private static double CalculateProviderExpenses( DefectiveSwitchData defectiveSwitchData )
-        {
-            double fullProbabilityOfDefective = defectiveSwitchData.OneProcentProbability * 0.01
-                + defectiveSwitchData.TwoProcentProbability * 0.02
-                + defectiveSwitchData.ThreeProcentProbability * 0.03;
-            Console.WriteLine( $"Вероятность брака детали по формуле полной вероятности: {fullProbabilityOfDefective}" );
-
-            int defectiveSwitchAmount = ( int )( SWITCH_AMOUNT * fullProbabilityOfDefective );
-            Console.WriteLine( $"Вероятное количестов бракованных деталей: {defectiveSwitchAmount}" );
-
-            double switchRepairCost = defectiveSwitchAmount * REPAIR_COST;
-            double providerExpenses = switchRepairCost - defectiveSwitchData.ProviderDiscount;
-            Console.WriteLine( $"Стоимость ремонта бракованных деталей: {switchRepairCost}, скидка поставщика: {defectiveSwitchData.ProviderDiscount}, расходы с данным поставщиком: {providerExpenses}" );
-
-            return providerExpenses;
+            double minExpense = providerExpenses.Min( e => e.Expense );
+            var recommendedProvider = providerExpenses.FirstOrDefault( item => item.Expense == minExpense );
+            Console.WriteLine( $"Рекомендуемый поставщик: {recommendedProvider.ProviderIndex} с расходами: {recommendedProvider.Expense}" );
         }
     }
 }
