@@ -1,4 +1,7 @@
 ﻿using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
 
 namespace TPR_task
 {
@@ -9,21 +12,50 @@ namespace TPR_task
 
         public static void Main( string[] args )
         {
-            var providerADefectiveData = new DefectiveSwitchData( 0.7, 0.2, 0.1 );
-            var providerBDefectiveData = new DefectiveSwitchData( 0.3, 0.4, 0.3 );
+            Console.WriteLine( "Введите расположение файла с данными поставщиков" );
+            string filePath = Console.ReadLine();
 
-            Console.WriteLine( "Расчитываем расходы с поставщиком A" );
-            double providerAExpenses = CalculateProviderExpenses( providerADefectiveData );
-            Console.WriteLine();
+            var defectiveSwitchDatas = ReadDefectiveSwitchData( filePath );
+            var providerExpenses = new Dictionary<int, double>();
 
-            Console.WriteLine( "Расчитываем расходы с поставщиком B" );
-            double providerBExpenses = CalculateProviderExpenses( providerBDefectiveData, 37000 );
-            Console.WriteLine();
+            for ( int i = 0; i < defectiveSwitchDatas.Count; i++ )
+            {
+                Console.WriteLine( $"Расчитываем расходы с поставщиком: {i}" );
+                providerExpenses.Add( i, CalculateProviderExpenses( defectiveSwitchDatas[ i ] ) );
+                Console.WriteLine();
+            }
 
-            Console.WriteLine( $"Рекомендуемый поставщик: {( providerAExpenses > providerBExpenses ? "B" : "A" )}" );
+            var recommendedProvider = providerExpenses.FirstOrDefault( item => item.Value == providerExpenses.Values.Min() );
+            Console.WriteLine( $"Рекомендуемый поставщик: {recommendedProvider.Key} с расходами: {recommendedProvider.Value}" );
         }
 
-        private static double CalculateProviderExpenses( DefectiveSwitchData defectiveSwitchData, double providerDiscount = 0 )
+        private static IReadOnlyList<DefectiveSwitchData> ReadDefectiveSwitchData( string filePath )
+        {
+            var result = new List<DefectiveSwitchData>();
+            using ( StreamReader fstream = new StreamReader( filePath ) )
+            {
+                while ( !fstream.EndOfStream )
+                {
+                    string switchData = fstream.ReadLine();
+                    string[] switchDataArr = switchData.Replace( '.', ',' ).Split( ' ' );
+
+                    double oneProcentProbability = Convert.ToDouble( switchDataArr[ 0 ] );
+                    double twoProcentProbability = Convert.ToDouble( switchDataArr[ 1 ] );
+                    double threeProcentProbability = Convert.ToDouble( switchDataArr[ 2 ] );
+                    double? providerDiscount = switchDataArr.Length == 4 ? Convert.ToDouble( switchDataArr[ 3 ] ) : null;
+
+                    result.Add( new DefectiveSwitchData(
+                        oneProcentProbability,
+                        twoProcentProbability,
+                        threeProcentProbability,
+                        providerDiscount ) );
+                }
+            }
+
+            return result;
+        }
+
+        private static double CalculateProviderExpenses( DefectiveSwitchData defectiveSwitchData )
         {
             double fullProbabilityOfDefective = defectiveSwitchData.OneProcentProbability * 0.01
                 + defectiveSwitchData.TwoProcentProbability * 0.02
@@ -34,8 +66,8 @@ namespace TPR_task
             Console.WriteLine( $"Вероятное количестов бракованных деталей: {defectiveSwitchAmount}" );
 
             double switchRepairCost = defectiveSwitchAmount * REPAIR_COST;
-            double providerExpenses = switchRepairCost - providerDiscount;
-            Console.WriteLine($"Стоимость ремонта бракованных деталей: {switchRepairCost}, скижка поставщика: {providerDiscount}, расходы с данным поставщиком: {providerExpenses}");
+            double providerExpenses = switchRepairCost - defectiveSwitchData.ProviderDiscount;
+            Console.WriteLine( $"Стоимость ремонта бракованных деталей: {switchRepairCost}, скидка поставщика: {defectiveSwitchData.ProviderDiscount}, расходы с данным поставщиком: {providerExpenses}" );
 
             return providerExpenses;
         }
